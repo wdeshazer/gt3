@@ -9,12 +9,12 @@
 #########################################
 
 import matplotlib.pyplot as plt
-import lib.beams as beams
-import lib.funcs as funcs
-import lib.graphs as graphs
+#import lib.beams as beams
+#import lib.funcs as funcs
+import graphs as graphs
 
 #import lib.gtneut2.neutpy as gtneut
-from MaxPlasma import gt3
+from gt3 import gt3
 #from lib.funcs.dataGen import newScatPlot,smooth,multiScatPlot
 from scipy.interpolate import UnivariateSpline
 from numpy import interp, pi

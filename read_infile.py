@@ -74,7 +74,7 @@ class ReadInfile:
     def __init__(self, infile):
         sys.dont_write_bytecode = True 
         self.read_vars(infile)
-        self.read_exp()
+        self.read_exp(infile)
         self.set_ntrl_switch()
         #if hasattr(self, 'wall_file'):
         #    self.wall_prep()
@@ -196,7 +196,7 @@ class ReadInfile:
         
         self.in_line2d = {}
         self.in_line2d['wall_file'] = ['str', r0ds, 'wall_exp']
-        
+
         # Read input variables
         with open(os.getcwd() + '/inputs/' + infile, 'r') as f:
             for count, line in enumerate(f):
@@ -235,13 +235,17 @@ class ReadInfile:
         except:
             pass
 
-    def read_exp(self):
-        
+    def read_exp(self,gt3File):
+        try:
+            direct=str(int(gt3File.split("_")[-2]))+"_"+str(int(gt3File.split("_")[-1]))
+        except:
+            raise Exception("Could not obtain shot id and timeid for read input module")
+
         # read in additional input files
         for infile in self.in_prof:
             try:
                 exec("filename = self.%s"%(infile))
-                filepath = os.getcwd()+'/inputs'+ filename
+                filepath = os.path.join(os.getcwd(),"inputs",direct, filename)
                 try:
                     exec("self.%s = np.genfromtxt('%s',comments='#')"%(self.in_prof[infile][2], filepath))
                 except Exception as e:
@@ -253,7 +257,7 @@ class ReadInfile:
             try:
 
                 exec("filename = self.%s"%(infile))
-                filepath = os.getcwd()+'/inputs/'+ filename
+                filepath = os.path.join(os.getcwd(),"inputs",direct, filename)
                 try:
                     exec("self.%s = np.genfromtxt('%s',comments='#')"%(self.in_map2d[infile][2], filepath))
                 except Exception as e:
@@ -264,7 +268,7 @@ class ReadInfile:
         for infile in self.in_line2d:
             try:
                 exec("filename = self.%s"%(infile))
-                filepath = os.getcwd()+'/inputs/'+ filename
+                filepath = os.path.join(os.getcwd(),"inputs",direct, filename)
                 try:
                     exec("self.%s = np.genfromtxt('%s',comments='#')"%(self.in_line2d[infile][2], filepath))
                 except Exception as e:

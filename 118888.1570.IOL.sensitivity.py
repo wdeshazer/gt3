@@ -11,7 +11,7 @@ Created on Thu Dec 28 02:13:04 2017
 ###############################################################################
 
 import GTEDGE3_cli
-import lib.graphs.graphs as graphs
+import graphs.graphs
 import matplotlib.pyplot as plt
 import pickle
 
@@ -572,14 +572,21 @@ if __name__ == "__main__":
                 'IOL': True,
                 'quiet': True,
                 'reNeut': False,
-                'gt3Method': 'coreiolnbineuts'}
+                'gt3Method': 'radialtrans'}
     try:
-        shot = pickle.load(open("Outputs/s118888.1570.dat", "rb"))
+        shot = pickle.load(open("outputs/s118888.1570.dat", "rb"))
     except:
-        shot = GTEDGE3_cli.run(shotargs)
-        with open("Outputs/s118888.1570.dat", "wb") as f:
-            pickle.dump(shot, f)
-        f.close()
+        shot = GTEDGE3_cli.runGT3(shotargs)
+        try:
+            with open("outputs/s118888.1570.dat", "wb") as f:
+                pickle.dump(shot, f)
+        except Exception as e:
+             print e
+        try:
+            f.close()
+        except:
+            pass
+
 
     shotargs = {'shotid': 118888,
                 'timeid': 1570,
@@ -588,13 +595,13 @@ if __name__ == "__main__":
                 'IOL': False,
                 'quiet': True,
                 'reNeut': False,
-                'gt3Method': 'corenbineuts'}
+                'gt3Method': 'radialtrans'}
 
     try:
-        shotnoIOL = pickle.load(open("Outputs/s118888.1570.noIOL.dat", "rb"))
+        shotnoIOL = pickle.load(open("outputs/s118888.1570.noIOL.dat", "rb"))
     except:
-        shotnoIOL = GTEDGE3_cli.run(shotargs)
-        with open("Outputs/s118888.1570.noIOL.dat", "wb") as f:
+        shotnoIOL = GTEDGE3_cli.runGT3(shotargs)
+        with open("outputs/s118888.1570.noIOL.dat", "wb") as f:
             pickle.dump(shotnoIOL, f)
         f.close()
 
@@ -617,12 +624,12 @@ if __name__ == "__main__":
                 'IOL': True,
                 'quiet': True,
                 'reNeut': False,
-                'gt3Method': 'coreiolnbi'}
+                'gt3Method': 'radialtrans'}
     try:
-        shotnoneuts = pickle.load(open("Outputs/s118888.1570.noneuts.dat", "rb"))
+        shotnoneuts = pickle.load(open("outputs/s118888.1570.noneuts.dat", "rb"))
     except:
-        shotnoneuts = GTEDGE3_cli.run(shotargs)
-        with open("Outputs/s118888.1570.noneuts.dat", "wb") as f:
+        shotnoneuts = GTEDGE3_cli.runGT3(shotargs)
+        with open("outputs/s118888.1570.noneuts.dat", "wb") as f:
             pickle.dump(shotnoneuts, f)
         f.close()
 

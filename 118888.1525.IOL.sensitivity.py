@@ -530,7 +530,7 @@ if __name__=="__main__":
     try:
         shot=pickle.load(open("Outputs/s118888.1525.dat", "rb"))
     except:
-        shot=GTEDGE3_cli.run(shotargs)
+        shot=GTEDGE3_cli.runGT3(shotargs)
         with open("Outputs/s118888.1525.dat","wb") as f:
             pickle.dump(shot,f)
         f.close()

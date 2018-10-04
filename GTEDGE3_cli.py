@@ -9,17 +9,56 @@
 #########################################
 
 import matplotlib.pyplot as plt
-import lib.beams as beams
-import lib.funcs as funcs
-import lib.graphs as graphs
-from MaxPlasma import gt3
-from lib.funcs.dataGen import newScatPlot,smooth,multiScatPlot
-from scipy.interpolate import UnivariateSpline
+#import lib.beams as beams
+#import lib.funcs as funcs
+import graphs as graphs
+from gt3 import gt3, gt3Prep
+#from lib.funcs.dataGen import newScatPlot,smooth,multiScatPlot
+#from scipy.interpolate import UnivariateSpline
 from numpy import interp, pi
 from math import sqrt
 import inspect, sys, argparse,warnings,datetime,os
 import numpy as np
 from scipy import interpolate
+
+##########################################################
+#
+#    Module to catologue file names, graphs, etc.
+#
+#   When a new shot is added, include its details here
+#   where necessary (e.g., vpolID for bad pertrubation data
+#
+##########################################################
+
+
+def CatalogueCall(shotid,timeid,runid):
+    fileCat={}
+    fileCat["GTEDGEsupp"]="Inputs/GTEDGEsupp_"+str(shotid)+"_"+str(timeid)+".csv"
+    fileCat["GT3Consts"]="Inputs/GT3Consts_"+str(shotid)+"_"+str(timeid)+".csv"
+    fileCat["GT3Profs"]="Inputs/GT3Profs_"+str(shotid)+"_"+str(timeid)+".csv"
+    fileCat["GT3NBI"]="Inputs/GT3NBI_"+str(shotid)+"_"+str(timeid)+".csv"
+
+    fileCat["Erspl"]="p"+str(shotid)+"_"+str(timeid)+"_"+str(runid)+"_ersplrhob_sc.txt"
+    fileCat["toplasma"]=str(shotid)+"_"+str(timeid)+"_toplasma"
+    fileCat["bpol"]=str(shotid)+"_"+str(timeid)+"_"+str(runid)+"_bpol.txt"
+    fileCat["btor"]=str(shotid)+"_"+str(timeid)+"_"+str(runid)+"_btor.txt"
+    fileCat["R"]=str(shotid)+"_"+str(timeid)+"_"+str(runid)+"_Z.txt"
+    fileCat["BDRY"]=str(shotid)+"_"+str(timeid)+"_"+str(runid)+"_BDRY.txt"
+    fileCat["EPOTEN"]=str(shotid)+"_"+str(timeid)+"_"+str(runid)+"_EPOTEN.txt"
+    fileCat["lim"]=str(shotid)+"_"+str(timeid)+"_"+str(runid)+"_lim.txt"
+    fileCat["psirz"]=str(shotid)+"_"+str(timeid)+"_"+str(runid)+"_psirz.txt"
+    fileCat["Z"]=str(shotid)+"_"+str(timeid)+"_"+str(runid)+"_Z.txt"
+
+    vTorPoints={(166606,1950,"j8099"):[198],
+            (144977,3000,"j3000"):[193],
+            (118890,1515,"r90"):[181],
+            (118890,1560,"r90"):[191]}
+
+    try:
+        fileCat["vtorID"]=vTorPoints[(shotid,timeid,runid)]
+    except:
+        pass
+    return fileCat
 
 def str2bool(v):
     if v.lower() in ('yes', 'true', 't', 'y', '1'):
@@ -129,7 +168,7 @@ def run(shotargs):
     
 
 
-    fileNames=funcs.dataCat.CatalogueCall(shotid,timeid,runid)
+#    fileNames=funcs.dataCat.CatalogueCall(shotid,timeid,runid)
 
     
     GTedgeProfsFile=fileNames['GTEDGEsupp']
@@ -520,6 +559,61 @@ def run(shotargs):
 #    plt.show(block=True)
     errLog.close()
     return coreData
+
+def runGT3(shotargs):
+    ###########################################################################
+    #
+    #   GTEDGE 3 with full core data and interpretation
+    #   Uses gt3 as backend for background plasma calculations
+    #
+    #   Data provided as 201-point CSV files with the following naming conv.:
+    #
+    #   Input/GT3Profs_shotid_timeid.csv                Profiles w/ Core
+    #   Input/GT3Consts_shotid_timeid.csv               Constants
+    #   Input/nudraginputs_shotid_timeid_2v2.csv        GTEDGE profiles
+    #   Input/GT3NBIConsts_144977_3000                  NBI-Relevent Constants
+    #
+    ############################################################################
+    shotid = shotargs['shotid']
+    runid = shotargs['runid']
+    timeid = shotargs['timeid']
+    IOL = shotargs['IOL']
+    nbRun = shotargs['nbRun']
+    quiet = shotargs['quiet']
+    gt3Method = shotargs['gt3Method']
+    reNeut = shotargs['reNeut']
+
+    errLog = open("GT3err.%s.%s.log" % (shotid, timeid), "w+")
+    errLog.write("\n")
+    errLog.write("Time: %s \n" % str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+    errLog.write("%s.%s.%s  nbRun=%s IOL=%s \n" % (str(shotid), str(timeid), str(runid), str(nbRun), str(IOL)))
+
+    sys.stderr = errLog
+    warnings.simplefilter('always', UserWarning)
+    warnings.simplefilter('always', RuntimeWarning)
+    warnings.showwarning = customwarn
+
+    #fileNames = funcs.dataCat.CatalogueCall(shotid, timeid, runid)
+
+    print "shotid=%s   runid=%s    timeid=%s   IOL Correction=%s" % (str(shotid),str(runid),str(timeid),str(IOL))
+    maxfile='togt3_d3d_'+str(shotid)+'_'+str(timeid)
+    gt3Prep(shotid,timeid,runid,maxfile,reNeut,genFiles=False)
+
+
+    if reNeut==True:
+        try:
+            os.remove(os.path.join('inputs','gt3_%s_%s_neut.dat') % (str(shotid),(timeid)))
+        except:
+            pass
+
+    myPlasma = gt3(shotlabel=maxfile, mode=gt3Method)
+
+
+    return myPlasma.rtrans
+
+
+
+
 ###############################################################################
 #
 #

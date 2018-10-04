@@ -42,8 +42,8 @@ def neutPatch(core):
     core.izn_rate_fsa_t = calc_fsa(core.izn_rate.t, core.R, core.Z)
     core.izn_rate_fsa = calc_fsa(core.izn_rate.s + core.izn_rate.t, core.R, core.Z)
 
-    core.cool_rate_fsa = calc_fsa(core.n.e * core.n.C * np.nan_to_num(core.Lz.s) +
-                                  core.n.e * core.n.C * np.nan_to_num(core.Lz.t),
+    core.cool_rate_fsa = calc_fsa(core.n.e * core.n.C * np.nan_to_num(core.Lz_C.s) +
+                                  core.n.e * core.n.C * np.nan_to_num(core.Lz_C.t),
                                   core.R, core.Z)
 
     """
@@ -60,6 +60,8 @@ def corePatch(core):
     include D density as 0s but still have a carbon density from the fracz input file, giving an invalid result
 
     This is addressed by recreating the n_fsa namedtuple and z_eff_fsa in full, as namedtuples cannot be changed piecemeal
+
+    Also creates core.L_fsa from core values
 
     :param core:
     :return:
@@ -79,6 +81,21 @@ def corePatch(core):
 
     core.z_eff_fsa = calc_fsa((core.n.i * (1.**2) + core.n.C * (6.0**2))/(core.n.i * 1.0 + core.n.C * 6.0), core.R, core.Z) #TODO Similar updates (1.0 = atnum, 6.0 = zbar2)
 
+    core.L_fsa = namedtuple('L', 'T n p')(
+        namedtuple('T', 'i e')(
+            calc_fsa(core.L.T.i, core.R, core.Z),
+            calc_fsa(core.L.T.e, core.R, core.Z)
+        ),
+        namedtuple('n', 'i e')(
+            calc_fsa(core.L.n.i, core.R, core.Z),
+            calc_fsa(core.L.n.e, core.R, core.Z)
+        ),
+        namedtuple('p', 'i e')(
+            calc_fsa(core.L.p.i, core.R, core.Z),
+            calc_fsa(core.L.p.e, core.R, core.Z)
+        ),
+    )
+    core.E_r_fsa = calc_fsa(core.E_r, core.R, core.Z)
 
 def calc_part_src_nbi(beam, iol_adjusted=False, F_orb_nbi=None):
     """
@@ -672,7 +689,7 @@ class Chi:
 
 class RadialTransport(Chi):
     
-    def __init__(self, inp, core, iol, nbi, ntrl=False, iolFlag=True):
+    def __init__(self, inp, core, iol, nbi, ntrl=True, iolFlag=True):
         sys.dont_write_bytecode = True
 
         ##############################################################
@@ -694,6 +711,7 @@ class RadialTransport(Chi):
         n = core.n_fsa
         T = core.T_fsa
         L = core.L_fsa
+
         z_eff = core.z_eff_fsa
         R0_a = core.R0_a
         vol_P = core.vol
