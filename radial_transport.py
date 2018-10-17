@@ -29,7 +29,7 @@ ch_c = e * z_c  # charge of carbon
 
 E_phi = 0.04  # toroidal electrostatic potential
 
-def neutPatch(core):
+def neutPatch(core, neutFlag):
     """
 
     Re-runs FSA of quantities needed in rad transport that are not available because neutrals update is run after
@@ -47,13 +47,16 @@ def neutPatch(core):
                                   core.R, core.Z)
 
     """
-    Cuts off neutrals calculations at 0.8 to give realistic neutral shit
+    Cuts off neutrals calculations at 0.8 to give realistic neutrals shit
     """
 
     core.izn_rate_fsa = np.array(map(lambda x: core.izn_rate_fsa[-1] * x**10, core.r[:,0]/core.a))
     core.cool_rate_fsa = np.array(map(lambda x: core.cool_rate_fsa[-1] * x**10, core.r[:,0]/core.a))
 
-def corePatch(core):
+    if neutFlag == False:
+        core.izn_rate_fsa = np.zeros(len(core.r[:,0]))
+
+def corePatch(core, neutFlag):
     """
     Updates deuterium ion density and zeff. D density is invalid if no D density file is given because it will be
     set to 0. This screws up subsequent calculations in non-obvious ways. As an example, z_eff calculation will
@@ -69,15 +72,26 @@ def corePatch(core):
 
     core.n = namedtuple('n', 'i e n C')(core.n.e/(1.+.025*6.0), core.n.e, core.n.n, 0.025 * core.n.e/(1.+.025*6.0))   # TODO: Update 0.025 and 6.0 to actual fracz and zbar2
 
-    core.n_fsa = namedtuple('n', 'i e n C')(
-        calc_fsa(core.n.i, core.R, core.Z),
-        calc_fsa(core.n.e, core.R, core.Z),
-        namedtuple('nn', 's t tot')(
-            calc_fsa(core.n.n.s, core.R, core.Z),  # slow
-            calc_fsa(core.n.n.t, core.R, core.Z),  # thermal
-            calc_fsa(core.n.n.tot, core.R, core.Z)  # total
-        ),
-        calc_fsa(core.n.C, core.R, core.Z))
+    if neutFlag:
+        core.n_fsa = namedtuple('n', 'i e n C')(
+            calc_fsa(core.n.i, core.R, core.Z),
+            calc_fsa(core.n.e, core.R, core.Z),
+            namedtuple('nn', 's t tot')(
+                calc_fsa(core.n.n.s, core.R, core.Z),  # slow
+                calc_fsa(core.n.n.t, core.R, core.Z),  # thermal
+                calc_fsa(core.n.n.tot, core.R, core.Z)  # total
+            ),
+            calc_fsa(core.n.C, core.R, core.Z))
+    else:
+        core.n_fsa = namedtuple('n', 'i e n C')(
+            calc_fsa(core.n.i, core.R, core.Z),
+            calc_fsa(core.n.e, core.R, core.Z),
+            namedtuple('nn', 's t tot')(
+                np.zeros(len(core.n_fsa.i)),  # slow
+                np.zeros(len(core.n_fsa.i)),  # thermal
+                np.zeros(len(core.n_fsa.i))  # total
+            ),
+            calc_fsa(core.n.C, core.R, core.Z))
 
     core.z_eff_fsa = calc_fsa((core.n.i * (1.**2) + core.n.C * (6.0**2))/(core.n.i * 1.0 + core.n.C * 6.0), core.R, core.Z) #TODO Similar updates (1.0 = atnum, 6.0 = zbar2)
 
@@ -195,38 +209,67 @@ def calc_torque(beam,fforb):
     torque = power * np.sqrt(0.5 * mass / energy) * rtan * (1.0-fforb) # Piper Changes: Included fast ion losses.
     return torque
 
+def calc_Qi_diff_method(r, a, en_src_nbi_kept, en_src_nbi_lost, coolrate, dVdrho, iol_adjusted=False, E_orb=None):
+    dVdr = UnivariateSpline(r, dVdrho(r / a) / a, k=3, s=0)
+    dE_orb = UnivariateSpline(r, E_orb, k=3, s=0).derivative()
+    coolint = UnivariateSpline(r, coolrate, k=3, s=0)
+    en_src_nbi_keptint = UnivariateSpline(r, en_src_nbi_kept, k=3, s=0)
+    en_src_nbi_lostint = UnivariateSpline(r, en_src_nbi_lost, k=3, s=0)
+
+    def f(t, gamma, coolrate, Q_i_nbi, Qnbi_loss, dEdr, iolFlag):
+        if iolFlag:
+            return Q_i_nbi(t) - coolrate(t) - Qnbi_loss(t) - gamma * (dEdr(t) + 1 / (t + 0.003))
+        else:
+            return Q_i_nbi(t) - coolrate(t) - gamma * (1 / (t + 0.003))
+
+    from scipy.integrate import ode
+
+    gamma = ode(f).set_integrator('vode', with_jacobian=False)
+    gamma.set_initial_value(0., 0.).set_f_params(coolint, en_src_nbi_keptint, en_src_nbi_lostint, dE_orb,
+                                                 iol_adjusted)
+    dt = a / len(r)
+    x, y = [], []
+    while gamma.successful() and gamma.t < a:
+        x.append(gamma.t + dt)
+        y.append(gamma.integrate(gamma.t + dt))
+    gamma = UnivariateSpline(x, y, k=3, s=0)
+
+    print "Total volume in Qi_diff calc: " + str(UnivariateSpline(r, dVdr(r), k=3, s=0).integral(0., a))
+    print "Total nbi ion energy: " + str(UnivariateSpline(r, (en_src_nbi_keptint(r) + en_src_nbi_lostint(r)) * dVdr(r), k=3, s=0).integral(0., 1.)/(1E6))+" MW"
+    return gamma(r)
+
     # Piper Changes: Changed function name to denote differential method. If the name sux, feel free to change it.
-def calc_Qi_diff_method(r, n, T, en_src_nbi_i, cool_rate, r2sa, iol_adjusted=False, E_orb=None):  # formerly qheat
-
-    if iol_adjusted:
-        diff_E_orb = UnivariateSpline(r, E_orb, k=1, s=0).derivative()(r)
-    else:
-        diff_E_orb = np.zeros(r.shape)
-
-    qie = calc_qie(n,T,ion_species='D')
-
-    dQi_dr_interp = interp1d(r, (en_src_nbi_i - qie - cool_rate)*(1-diff_E_orb), fill_value='extrapolate')
-
-    # ion energy balance equation
-    def dQi_dr(Qi_0, r):
-        return dQi_dr_interp(r)
-
-    # boundary condition at magnetic axis
-    Qi_0 = en_src_nbi_i[0]  # or something like this
-
-    # solve ODE and divide by surface area
-    # note that r2sa is an interpolation function from core that calculates the
-    # surface area for a flux surface based on its corresponding value of r
-    surf_area = r2sa(r)
-    surf_area[0] = surf_area[1]  # this is just to prevent divide by zero errors at rho=0. Will be replaced later anyway
-
-    Qi = odeint(dQi_dr, Qi_0, r, hmax=0.1).T[0] / surf_area
-
-    # set the center value of Qi equal to the next point radially outward.
-    # Qi(0) is mathematically infinite, so this just gives us a reasonable representation.
-    Qi[0] = Qi[1]
-
-    return Qi
+# def calc_Qi_diff_method(r, n, T, en_src_nbi_i, cool_rate, r2sa, iol_adjusted=False, E_orb=None):  # formerly qheat
+#
+#     if iol_adjusted:
+#         diff_E_orb = UnivariateSpline(r, E_orb, k=1, s=0).derivative()(r)
+#     else:
+#         diff_E_orb = np.zeros(r.shape)
+#
+#     qie = calc_qie(n,T,ion_species='D')
+#
+#     dQi_dr_interp = interp1d(r, (en_src_nbi_i - qie - cool_rate)*(1-diff_E_orb), fill_value='extrapolate')
+#
+#     # ion energy balance equation
+#     def dQi_dr(Qi_0, r):
+#         return dQi_dr_interp(r)
+#
+#     # boundary condition at magnetic axis
+#     Qi_0 = en_src_nbi_i[0]  # or something like this
+#
+#     # solve ODE and divide by surface area
+#     # note that r2sa is an interpolation function from core that calculates the
+#     # surface area for a flux surface based on its corresponding value of r
+#     surf_area = r2sa(r)
+#     surf_area[0] = surf_area[1]  # this is just to prevent divide by zero errors at rho=0. Will be replaced later anyway
+#
+#     Qi = odeint(dQi_dr, Qi_0, r, hmax=0.1).T[0] / surf_area
+#
+#     # set the center value of Qi equal to the next point radially outward.
+#     # Qi(0) is mathematically infinite, so this just gives us a reasonable representation.
+#     Qi[0] = Qi[1]
+#
+#     return Qi
     
     # Piper Changes: Added cylindrical integral method as a separate function. This will be called separately in the main code.
 def calc_Qi_int_method(r, n, T, en_src_nbi_i_kept, cool_rate, iol_adjusted=False, E_orb=None):  # formerly qheat
@@ -357,79 +400,91 @@ def calc_coul_log(z1, z2, T_J, n2):
     coul_log = np.log(12 * pi * np.sqrt((eps_0 * T_J)**3 / (n2 * (z2*e)**4 * (z1*e)**2)))
     return coul_log
 
-    
-def calc_gamma_diff_method(r, part_src_nbi, izn_rate, r2sa, iol_adjusted=False, F_orb=None):
-    # Piper Changes: Changed function to denote differential method.
-    if iol_adjusted:
-        diff_F_orb = UnivariateSpline(r, F_orb, k=1, s=0).derivative()(r)
-    else:
-        diff_F_orb = np.zeros(r.shape)
 
-    # the two is to account for the inward radial current, assumed to be deuterium as well
-    dgamma_dr_interp = interp1d(r, (izn_rate + part_src_nbi)*(1-2*diff_F_orb), fill_value='extrapolate')
+def calc_gamma_diff_method(r, a, part_src_nbi_tot, part_src_nbi_lost, izn_rate, dVdrho, iol_adjusted=False, F_orb=None):
+    dVdr = UnivariateSpline(r, dVdrho(r / a) / a, k=3, s=0)
+    dF_orb = UnivariateSpline(r, F_orb, k=3, s=0).derivative()
+    izn_rateint = UnivariateSpline(r, izn_rate, k=3, s=0)
+    part_src_nbi_totint = UnivariateSpline(r, part_src_nbi_tot, k=3, s=0)
+    part_src_nbi_lostint = UnivariateSpline(r, part_src_nbi_lost, k=3, s=0)
 
-    # continuity equation
-    def dgamma_dr(gamma_0, r):
-        return dgamma_dr_interp(r)
+    def f(t, gamma, sion, snbi, snbi_loss, dFdr, iolFlag):
+        if iolFlag:
+            return snbi(t) + sion(t)  - snbi_loss(t) - gamma * (dFdr(t) + 1 / (t + 0.003))
+        else:
+            return snbi(t) + sion(t) - gamma * (1 / (t + 0.003))
 
-    # boundary condition at magnetic axis
+    from scipy.integrate import ode
 
-    gamma_0 = part_src_nbi[0]  # or something like this
+    gamma = ode(f).set_integrator('vode', with_jacobian=False)
+    gamma.set_initial_value(0., 0.).set_f_params(izn_rateint, part_src_nbi_totint, part_src_nbi_lostint, dF_orb, iol_adjusted)
+    dt = a / len(r)
+    x, y = [], []
+    while gamma.successful() and gamma.t < a:
+        x.append(gamma.t+dt)
+        y.append(gamma.integrate(gamma.t+dt))
+    gamma = UnivariateSpline(x, y, k=3, s=0)
 
-    # solve ODE and divide by surface area
-    # note that r2sa is an interpolation function from core that calculates the
-    # surface area for a flux surface based on its corresponding value of r
+    print "Total volume in gamma_diff calc: " + str(UnivariateSpline(r, dVdr(r), k=3, s=0).integral(0., a))
+    print "Total nbi source: " + str(UnivariateSpline(r, part_src_nbi_totint(r) * dVdr(r), k=3, s=0).integral(0., 1.))
+    return gamma(r)
 
-    surf_area = r2sa(r)
-    surf_area[0] = surf_area[1]  # this is just to prevent divide by zero errors at rho=0. Will be replaced later anyway
-
-    gamma = odeint(dgamma_dr, gamma_0, r).T[0] / surf_area
-
-    # set the center value of gamma equal to the next point radially outward.
-    # Gamma(0) is mathematically infinite, so this just gives us a reasonable representation.
-    gamma[0] = gamma[1]
-
-    return gamma
+# OLD METHOD
+# def calc_gamma_diff_method(r, part_src_nbi, izn_rate, r2sa, iol_adjusted=False, F_orb=None):
+#     # Piper Changes: Changed function to denote differential method.
+#     if iol_adjusted:
+#         diff_F_orb = UnivariateSpline(r, F_orb, k=1, s=0).derivative()(r)
+#     else:
+#         diff_F_orb = np.zeros(r.shape)
+#
+#     # the two is to account for the inward radial current, assumed to be deuterium as well
+#     dgamma_dr_interp = interp1d(r, (izn_rate + part_src_nbi)*(1-2*diff_F_orb), fill_value='extrapolate')
+#
+#     # continuity equation
+#     def dgamma_dr(gamma_0, r):
+#         return dgamma_dr_interp(r)
+#
+#     # boundary condition at magnetic axis
+#
+#     gamma_0 = part_src_nbi[0]  # or something like this
+#
+#     # solve ODE and divide by surface area
+#     # note that r2sa is an interpolation function from core that calculates the
+#     # surface area for a flux surface based on its corresponding value of r
+#
+#     surf_area = r2sa(r)
+#     surf_area[0] = surf_area[1]  # this is just to prevent divide by zero errors at rho=0. Will be replaced later anyway
+#
+#     gamma = odeint(dgamma_dr, gamma_0, r).T[0] / surf_area
+#
+#     # set the center value of gamma equal to the next point radially outward.
+#     # Gamma(0) is mathematically infinite, so this just gives us a reasonable representation.
+#     gamma[0] = gamma[1]
+#
+#     return gamma
     
     
 def calc_gamma_int_method(r, part_src_nbi_tot, part_src_nbi_lost, izn_rate, iol_adjusted=False, F_orb=None):
     # Piper Changes: Added cylindrical integral method as a separate function. This will be set to a separate variable in the main code.
     gamma = np.zeros(r.shape)
-    
+
     # Boundary condition at magnetic axis. Needs to be in units of ions/m^3.
     # Only has the second term, since it's the center value. Also uses delta_r of the next point to avoid indexing into a non-existant location.
     # If not adjusted for IOL, part_src_nbi_lost = 0 anyway, so no need for an IOL check.
     gamma[0] = (part_src_nbi_tot[0] - 2*part_src_nbi_lost[0] + izn_rate[0])*(r[1] - r[0])
     gamma[1] = gamma[0] + (part_src_nbi_tot[1] - 2*part_src_nbi_lost[1] + izn_rate[1])*(r[1] - r[0])
-    
+
     # You'll  prolly want to change this since it uses a dreaded for loop.
     for n in range(2,len(r)): # Pretty sure len() is still valid for multidimensional arrays.
         # The 2*part_src_nbi_lost is the factor of 2 in the fast IOL.
         if iol_adjusted:
-            # Imported the exp() function for the thermal IOL attenuation. 
-            gamma[n] = (r[n]/r[n-1]) * gamma[n-1] * exp(-2*(F_orb[n]-F_orb[n-1])) + (part_src_nbi_tot[n] - 2*part_src_nbi_lost[n] + izn_rate[n])*(r[n] - r[n-1])
+            # Imported the exp() function for the thermal IOL attenuation.
+            gamma[n] = (r[n-1]/r[n]) * gamma[n-1] * exp(-2*(F_orb[n]-F_orb[n-1])) + (part_src_nbi_tot[n] - 2*part_src_nbi_lost[n] + izn_rate[n])*(r[n] - r[n-1])
         else:
-            gamma[n] = (r[n]/r[n-1]) * gamma[n-1] + (part_src_nbi_tot[n] + izn_rate[n])*(r[n] - r[n-1])
+            gamma[n] = (r[n-1]/r[n]) * gamma[n-1] + (part_src_nbi_tot[n] + izn_rate[n])*(r[n] - r[n-1])
 
     return gamma
 
-# OLD VERSION
-#
-# rhovals = rho[:, 0]
-#
-# xpon = np.zeros(rho.shape)
-# gamma = np.zeros(rho.shape)
-# for i, rho in enumerate(rhovals):
-#     if rho > 0:
-#
-#         if iol_adjusted:
-#             xpon[i] = np.exp(-2.0 * (F_orb[i] - F_orb[i-1]))
-#         else:
-#             xpon[i] = 1
-#
-#         srprim = src_nbi[i] + 0.5 * (n.i[i] + n.i[i-1]) * xnuioni * (1 + fracz[i] * zbar2[i])
-#         gamma[i] = rho[i-1] / rho[i] * gamma[i-1] * xpon[i] + srprim * delma
-# return gamma
 
 def calc_return_cur(r, part_src_nbi_lost, gamma, izn_rate, ch_d, iol_adjusted=False, F_orb=None):
 
@@ -657,10 +712,10 @@ class Chi:
 
         self.Qi_i = data.Qi_i
         self.Qe_i = data.Qe_i
-        self.conv15 = 1.5 * ch_d * data.gamma_i_D * T.i.ev
-        self.conv25 = 2.5 * ch_d * data.gamma_i_D * T.i.ev
-        self.heatvisc = np.zeros(data.gamma_i_D.shape)
-        self.heatin = 0.5 * data.gamma_i_D * m_d * (data.vtor_D_total**2 + data.vpol_D**2) # TODO: Provide logic that uses vtor_D_intrin/fluid depending on IOL Switch, currently too small to matter
+        self.conv15 = 1.5 * ch_d * data.gamma_d_D * T.i.ev
+        self.conv25 = 2.5 * ch_d * data.gamma_d_D * T.i.ev
+        self.heatvisc = np.zeros(data.gamma_d_D.shape)
+        self.heatin = 0.5 * data.gamma_d_D * m_d * (data.vtor_D_total**2 + data.vpol_D**2) # TODO: Provide logic that uses vtor_D_intrin/fluid depending on IOL Switch, currently too small to matter
 
         self.chi = namedtuple('chi','i e')(
             namedtuple('i','chi1 chi2 chi3 chi4')(
@@ -672,7 +727,7 @@ class Chi:
         )
 
     def calc_chi_e(self, data, n, L, T):
-        gameltemp = 1.0* data.gamma_i_D + 6.0 * data.gamma_C   #OHHHH gamma electron!!! HA HA HA HA WE DON'T KNOW WHAT THE FUCK GAMMA_C IS
+        gameltemp = 1.0* data.gamma_d_D + 6.0 * data.gamma_C   #OHHHH gamma electron!!! HA HA HA HA WE DON'T KNOW WHAT THE FUCK GAMMA_C IS
 
         return L.T.e * ((self.Qe_i / (ch_d * n.e * T.e.ev)) - 1.5 * gameltemp / n.e)
 
@@ -689,7 +744,8 @@ class Chi:
 
 class RadialTransport(Chi):
     
-    def __init__(self, inp, core, iol, nbi, ntrl=True, iolFlag=True):
+
+    def __init__(self, inp, core, iol, nbi, iolFlag = True, neutFlag = True, debugFlag = False):
         sys.dont_write_bytecode = True
 
         ##############################################################
@@ -701,11 +757,15 @@ class RadialTransport(Chi):
         beam_D2 = nbi.beams.D2
         beam_D3 = nbi.beams.D3
 
-        if ntrl: neutPatch(core) # Patch to update neutrals-related quantities
-        corePatch(core) # Patch to update values not brought in via files (ni, zeff)
+
+        corePatch(core, neutFlag) # Patch to update values not brought in via files (ni, zeff)
+        neutPatch(core, neutFlag) # Patch to update neutrals-related quantities
 
         # prepare core and iol quantities
         r = core.r.T[0]    # TODO: Should this be a flux surface average?
+        self.rhor = r/core.a
+        self.r = r
+        self.a = core.a
         izn_rate = core.izn_rate_fsa  # TODO: Should this be a flux surface average or a flux surface total?
         cool_rate = core.cool_rate_fsa  # TODO: Should this be a flux surface average or a flux surface total?
         n = core.n_fsa
@@ -738,6 +798,24 @@ class RadialTransport(Chi):
         M_orb_d_nbi = iol.morb_d_nbi_1D
         E_orb_d_nbi = iol.eorb_d_nbi_1D
 
+        if iolFlag == False:
+            F_orb_d = np.zeros(len(Er))
+            M_orb_d = np.zeros(len(Er))
+            E_orb_d = np.zeros(len(Er))
+
+            F_orb_c = np.zeros(len(Er))
+            M_orb_c = np.zeros(len(Er))
+            E_orb_c = np.zeros(len(Er))
+
+            F_orb_t = np.zeros(len(Er))
+            M_orb_t = np.zeros(len(Er))
+            E_orb_t = np.zeros(len(Er))
+
+            # prepare fast iol quantities
+            F_orb_d_nbi = np.zeros(len(Er))
+            M_orb_d_nbi = np.zeros(len(Er))
+            E_orb_d_nbi = np.zeros(len(Er))
+
         ##############################################################
         # particle balance
         ##############################################################
@@ -752,10 +830,11 @@ class RadialTransport(Chi):
         part_src_nbi_tot = part_src_nbi_D_tot + part_src_nbi_D2_tot + part_src_nbi_D3_tot
         part_src_nbi_lost = part_src_nbi_D_lost + part_src_nbi_D2_lost + part_src_nbi_D3_lost
         part_src_nbi_kept = part_src_nbi_D_kept + part_src_nbi_D2_kept + part_src_nbi_D3_kept
-        
+        #self.gamma_i_D = calc_gamma_int_method(r, part_src_nbi_kept, part_src_nbi_lost, izn_rate, iol_adjusted=iolFlag, F_orb=F_orb_d)
         # Piper changes: Calculate gamma using the differential and integral methods, respectively.
-        self.gamma_d_D = calc_gamma_diff_method(r, part_src_nbi, izn_rate, core.r2sa, iol_adjusted=iolFlag, F_orb=F_orb_d) # Differential Cylindrical Method
-        self.gamma_i_D = calc_gamma_int_method(r, part_src_nbi_tot, part_src_nbi_lost, izn_rate, iol_adjusted=iolFlag, F_orb=F_orb_d) # Integral Cylindrical Method
+        #self.gamma_d_D = calc_gamma_diff_method(r, part_src_nbi, izn_rate, core.r2sa, iol_adjusted=iolFlag, F_orb=F_orb_d) # Differential Cylindrical Method
+        self.gamma_i_D = calc_gamma_int_method(r, part_src_nbi_tot, part_src_nbi_lost, izn_rate, iol_adjusted=iolFlag, F_orb=F_orb_d) # Integral Cylindrical Method | Why not using kept?
+        self.gamma_d_D = calc_gamma_diff_method(r, core.a, part_src_nbi_kept, part_src_nbi_lost, izn_rate, core.dVdrho, iol_adjusted=iolFlag, F_orb=F_orb_d) # JRO Differential Cylindrical Method
         self.gamma_C = np.zeros(self.gamma_i_D.shape)
         
         # Piper changes: Calculate radial return current (Uses integral cylindrical gamma)
@@ -871,7 +950,7 @@ class RadialTransport(Chi):
         en_src_nbi_e = en_src_nbi_i_kept
 
         # calculate radial heat flux. Piper changes: Separated heat flux equations into differential and integral cylindrical methods.
-        self.Qi_d = calc_Qi_diff_method(r, n, T, en_src_nbi_i, cool_rate, core.r2sa, iol_adjusted=iolFlag, E_orb=E_orb_d)  # previously called qheat. Differential Method.
+        self.Qi_d = calc_Qi_diff_method(r, core.a, en_src_nbi_i_kept, en_src_nbi_i_lost, cool_rate, core.dVdrho, iol_adjusted=iolFlag, E_orb=E_orb_d)  # previously called qheat. Differential Method.
         self.Qi_i = calc_Qi_int_method(r, n, T, en_src_nbi_i_kept, cool_rate, iol_adjusted=iolFlag, E_orb=E_orb_d) # Integral method.
         self.Qe_d = calc_Qe_diff_method(r, n, T, en_src_nbi_e, cool_rate, core.r2sa) # Differential Method.
         self.Qe_i = calc_Qe_int_method(r, n, T, en_src_nbi_e, cool_rate) # Integral method.
@@ -883,5 +962,196 @@ class RadialTransport(Chi):
             core.n.n.t,  # thermal
             core.n.n.tot  # total
         )
-        plt.plot(r, self.gamma_i_D)
-        plt.show()
+        if debugFlag:
+            """Beam source debugging"""
+            nbiDebug(self.rhor, core.a, en_src_nbi_i_kept, en_src_nbi_e, part_src_nbi_kept, self.mom_src_nbi, core.dVdrho)
+            """Particle flux debuggin"""
+            gammaDebug(self.rhor, core.a, core.r2sa, core.dVdrho, part_src_nbi, part_src_nbi_kept, izn_rate, self.gamma_i_D, self.gamma_d_D)
+
+def nbiDebug(rho, a, Qi, Qe, Si, Mi, dVdrho):
+    """ """
+    dVdr = dVdrho(rho)/a
+
+    fig = plt.figure(figsize=(12, 8))
+    fig.tight_layout()
+    fig.suptitle(r'Radial Transport Debug Info: NBI')
+    ax1 = fig.add_subplot(221)
+    ax1.set_title(r'$Q^{nbi}_i$', fontsize=16)
+    ax1.set_ylabel(r"""$Q^{nbi}_i$
+                    $\left[\frac{J}{m^3}\right]$""", fontsize=16, rotation=0, ha='right')
+    ax1.set_xlabel(r'$\rho$', fontsize=16, labelpad=-10)
+    ax1.plot(rho, Qi)
+
+    ax2 = fig.add_subplot(222)
+    ax2.set_title(r'$Q^{nbi}_e$', fontsize=16)
+    ax2.set_ylabel(r"""$Q^{nbi}_e$
+                    $\left[J/{m^3}\right]$""", fontsize=16, rotation=0, ha='right')
+    ax2.set_xlabel(r'$\rho$', fontsize=16, labelpad=-10)
+    ax2.plot(rho, Qe)
+
+    ax3 = fig.add_subplot(223)
+    ax3.set_title(r'$S^{nbi}_i$', fontsize=16)
+    ax3.set_ylabel(r"""$S^{nbi}_i$
+                    $\left[\frac{\#}{m^3}\right]$""", fontsize=16, rotation=0, ha='right')
+    ax3.set_xlabel(r'$\rho$', fontsize=16, labelpad=-10)
+    ax3.plot(rho, Si)
+
+    ax4 = fig.add_subplot(224)
+    ax4.set_title(r'$M^{nbi}_i$', fontsize=16)
+    ax4.set_ylabel(r"""$M^{nbi}_i$
+                   $\left[\frac{N s}{m^3}\right]$""", fontsize=16, rotation=0, ha='right')
+    ax4.set_xlabel(r'$\rho$', fontsize=16, labelpad=-10)
+    ax4.plot(rho, Mi)
+
+    #partTot = UnivariateSpline(rho*a, 4 * pi**2 * R0 * (rho*a) * Si, k=3,  s=0).integral(0., a)
+    #enerTot = UnivariateSpline(rho*a, 4 * pi**2 * R0 * (rho*a) * Qi, k=3, s=0).integral(0., a)
+    enerTot = UnivariateSpline(rho*a, Qi * dVdr, k=3, s=0).integral(0., a)
+    partTot = UnivariateSpline(rho*a, Si * dVdr, k=3, s=0).integral(0., a)
+    volTot = UnivariateSpline(rho*a, dVdr, k=3, s=0).integral(0., a)
+
+    print r"""NBI Debug info:
+    
+            {:<16}          {}
+            {:<16}          {} MW
+            {:<16}          {} $m^3$
+            """.format("Total # particles", str(partTot),
+                       "Total energy", str(enerTot/(1E6)),
+                       "Total volume", str(volTot)
+                       )
+
+    plt.show(block=False)
+
+def balance(gamma, interm, r, sa, x):
+    return r[x], UnivariateSpline(r, interm, k=3, s=0).integral(0., r[x]), gamma[x]*sa(r[x])
+
+def gammaDebug(rho, a, r2sa, dVdrho, Snbi_d_i, Snbi_kept_i, Sizn, gamma_i_D, gamma_d_D):
+
+    dVdr = dVdrho(rho)/a
+
+    fig = plt.figure(figsize=(12, 8))
+    fig.tight_layout()
+    fig.suptitle(r'Radial Transport Debug Info: Deuterium Radial Particle Flux')
+
+    ax1 = fig.add_subplot(231)
+    ax1.set_title(r'$S^{nbi}_{diff,i}$', fontsize=16)
+    ax1.set_ylabel(r"""$S_i$
+                       $\left[\frac{\#}{m^3 s}\right]$""", fontsize=16, rotation=0, ha='right')
+    ax1.set_xlabel(r'$\rho$', fontsize=16, labelpad=-10)
+    ax1.plot(rho, Snbi_d_i)
+
+    ax2 = fig.add_subplot(232)
+    ax2.set_title(r'$S^{nbi}_{int,i}$', fontsize=16)
+    ax2.set_ylabel(r"""$S_i$
+                       $\left[\frac{\#}{m^3 s}\right]$""", fontsize=16, rotation=0, ha='right')
+    ax2.set_xlabel(r'$\rho$', fontsize=16, labelpad=-10)
+    ax2.plot(rho, Snbi_kept_i)
+
+    ax3 = fig.add_subplot(233)
+    ax3.set_title(r'$S_{ion}$', fontsize=16)
+    ax3.set_ylabel(r"""$S_i$
+                       $\left[\frac{\#}{m^3 s}\right]$""", fontsize=16, rotation=0, ha='right')
+    ax3.set_xlabel(r'$\rho$', fontsize=16, labelpad=-10)
+    ax3.plot(rho, Sizn)
+
+    ax4 = fig.add_subplot(234)
+    ax4.set_title(r'$\Gamma_{r,int}$', fontsize=16)
+    ax4.set_ylabel(r"""$\Gamma_{r}$
+                        $\left[\frac{\#}{m^2 s}\right]$""", fontsize=16, rotation=0, ha='right')
+    ax4.set_xlabel(r'$\rho$', fontsize=16, labelpad=-10)
+    ax4.plot(rho, gamma_i_D)
+
+    ax5 = fig.add_subplot(235)
+    ax5.set_title(r'$\Gamma_{r,diff}$', fontsize=16)
+    ax5.set_ylabel(r"""$\Gamma_{r}$
+                        $\left[\frac{\#}{m^2 s}\right]$""", fontsize=16, rotation=0, ha='right')
+    ax5.set_xlabel(r'$\rho$', fontsize=16, labelpad=-10)
+    ax5.plot(rho, gamma_d_D)
+
+    plt.show(block=False)
+
+    partIn = UnivariateSpline(rho*a, (Snbi_kept_i + Sizn) * dVdr, k=3, s=0).integral(0., a)
+    partOut = gamma_i_D[-1]*r2sa(a)
+    totVol = UnivariateSpline(rho*a, dVdr, k=3, s=0).integral(0., a)
+
+    print r"""Radial Particle Flux Debug info:
+
+            {:<16}          {}
+            {:<16}          {}
+            {:<16}          {}
+            {:<16}          {}
+            """.format("Total # particles in", str(partIn),
+                       "Total # particles out", str(partOut),
+                       "Total volume", str(totVol),
+                       "Surface area at LCFS", str(r2sa(a))
+                       )
+    print r"""r          Particles in      Particles out"""
+    for x in range(len(rho)):
+        strList=balance(gamma_i_D, (Snbi_kept_i + Sizn) * dVdr, rho*a, r2sa, x)
+        strDiff = 100.*np.abs(strList[1]-strList[2])/np.average(np.array(strList))
+        print """{:<15}    {:<15}     {:<15}      {:<15}%""".format(strList[0], strList[1], strList[2], str(strDiff))
+
+def QDebug(rho, a, r2sa, dVdrho, Snbi_d_i, Snbi_kept_i, Sizn, gamma_i_D, gamma_d_D):
+    # TODO: FINISH THIS
+    dVdr = dVdrho(rho)/a
+
+    fig = plt.figure(figsize=(12, 8))
+    fig.tight_layout()
+    fig.suptitle(r'Radial Transport Debug Info: Deuterium Radial Particle Flux')
+
+    ax1 = fig.add_subplot(231)
+    ax1.set_title(r'$S^{nbi}_{diff,i}$', fontsize=16)
+    ax1.set_ylabel(r"""$S_i$
+                       $\left[\frac{\#}{m^3 s}\right]$""", fontsize=16, rotation=0, ha='right')
+    ax1.set_xlabel(r'$\rho$', fontsize=16, labelpad=-10)
+    ax1.plot(rho, Snbi_d_i)
+
+    ax2 = fig.add_subplot(232)
+    ax2.set_title(r'$S^{nbi}_{int,i}$', fontsize=16)
+    ax2.set_ylabel(r"""$S_i$
+                       $\left[\frac{\#}{m^3 s}\right]$""", fontsize=16, rotation=0, ha='right')
+    ax2.set_xlabel(r'$\rho$', fontsize=16, labelpad=-10)
+    ax2.plot(rho, Snbi_kept_i)
+
+    ax3 = fig.add_subplot(233)
+    ax3.set_title(r'$S_{ion}$', fontsize=16)
+    ax3.set_ylabel(r"""$S_i$
+                       $\left[\frac{\#}{m^3 s}\right]$""", fontsize=16, rotation=0, ha='right')
+    ax3.set_xlabel(r'$\rho$', fontsize=16, labelpad=-10)
+    ax3.plot(rho, Sizn)
+
+    ax4 = fig.add_subplot(234)
+    ax4.set_title(r'$\Gamma_{r,int}$', fontsize=16)
+    ax4.set_ylabel(r"""$\Gamma_{r}$
+                        $\left[\frac{\#}{m^2 s}\right]$""", fontsize=16, rotation=0, ha='right')
+    ax4.set_xlabel(r'$\rho$', fontsize=16, labelpad=-10)
+    ax4.plot(rho, gamma_i_D)
+
+    ax5 = fig.add_subplot(235)
+    ax5.set_title(r'$\Gamma_{r,diff}$', fontsize=16)
+    ax5.set_ylabel(r"""$\Gamma_{r}$
+                        $\left[\frac{\#}{m^2 s}\right]$""", fontsize=16, rotation=0, ha='right')
+    ax5.set_xlabel(r'$\rho$', fontsize=16, labelpad=-10)
+    ax5.plot(rho, gamma_d_D)
+
+    plt.show(block=False)
+
+    partIn = UnivariateSpline(rho*a, (Snbi_kept_i + Sizn) * dVdr, k=3, s=0).integral(0., a)
+    partOut = gamma_i_D[-1]*r2sa(a)
+    totVol = UnivariateSpline(rho*a, dVdr, k=3, s=0).integral(0., a)
+
+    print r"""Radial Particle Flux Debug info:
+
+            {:<16}          {}
+            {:<16}          {}
+            {:<16}          {}
+            {:<16}          {}
+            """.format("Total # particles in", str(partIn),
+                       "Total # particles out", str(partOut),
+                       "Total volume", str(totVol),
+                       "Surface area at LCFS", str(r2sa(a))
+                       )
+    print r"""r          Particles in      Particles out"""
+    for x in range(len(rho)):
+        strList=balance(gamma_i_D, (Snbi_kept_i + Sizn) * dVdr, rho*a, r2sa, x)
+        strDiff = 100.*np.abs(strList[1]-strList[2])/np.average(np.array(strList))
+        print """{:<15}    {:<15}     {:<15}      {:<15}%""".format(strList[0], strList[1], strList[2], str(strDiff))

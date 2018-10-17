@@ -582,6 +582,8 @@ def runGT3(shotargs):
     quiet = shotargs['quiet']
     gt3Method = shotargs['gt3Method']
     reNeut = shotargs['reNeut']
+    neutrals = shotargs['neutrals']
+    debug = shotargs['debug']
 
     errLog = open("GT3err.%s.%s.log" % (shotid, timeid), "w+")
     errLog.write("\n")
@@ -597,7 +599,7 @@ def runGT3(shotargs):
 
     print "shotid=%s   runid=%s    timeid=%s   IOL Correction=%s" % (str(shotid),str(runid),str(timeid),str(IOL))
     maxfile='togt3_d3d_'+str(shotid)+'_'+str(timeid)
-    gt3Prep(shotid,timeid,runid,maxfile,reNeut,genFiles=False)
+    gt3Prep(shotid,timeid,runid,maxfile,reNeut,quiet = quiet, genFiles=False)
 
 
     if reNeut==True:
@@ -606,7 +608,7 @@ def runGT3(shotargs):
         except:
             pass
 
-    myPlasma = gt3(shotlabel=maxfile, mode=gt3Method)
+    myPlasma = gt3(shotlabel=maxfile, mode=gt3Method, iolFlag = IOL, neutFlag = neutrals, debugRT = debug)
 
 
     return myPlasma.rtrans
@@ -647,8 +649,12 @@ if __name__== "__main__":
                         default=True,help="Correct for IOL")
     parser.add_argument("-reNeut",type=str2bool,nargs='?',#const=True,
                         default=True,help="Rerun the neutrals")
+    praser.add_argument("-neutrals", type=str2bool, nargs='?',
+                        default=True, help="Calculates neutrals")
     parser.add_argument("-gt3Method",type=str2bool,nargs='?',#const="brndiolneuts",
                         default="brndiolneuts",help="What GT3 method to run")
+    parser.add_argument("-debug", type=str2bool, nargs='?',
+                        default="False", help="Produce Radial Transport debug profiles")
     parser.add_argument("-q",action='store_true',help="Disable informational popus")
     
 

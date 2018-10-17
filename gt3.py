@@ -34,12 +34,15 @@ class gt3:
         nbeams:
         adpack:
     """
-    def __init__(self, shotlabel=None, mode=None):
+    def __init__(self, shotlabel=None, mode=None, iolFlag=True, neutFlag=True, debugRT = False):
         sys.dont_write_bytecode = True 
         # Create shotlabel as an attribute of plasma class
         self.shotlabel = shotlabel
         self.inp = ReadInfile(self.shotlabel)
+        self.iolFlag=iolFlag
+        self.neutFlag=neutFlag
         self.core = Core(self.inp)
+        self.debugRT = debugRT
 
         if mode == 'coreonly':
             pass
@@ -84,7 +87,7 @@ class gt3:
             self.nbi = BeamDeposition(self.inp, self.core)
             self.ntrl = Neutrals(self.inp, self.core)
             self.imp = ImpRad(core=self.core)
-            self.rtrans = RadialTransport(self.inp, self.core, self.iol, self.nbi)
+            self.rtrans = RadialTransport(self.inp, self.core, self.iol, self.nbi, self.iolFlag, self.neutFlag, debugFlag = self.debugRT)
 
 
 def getNum(prompt, valType):
@@ -394,7 +397,7 @@ def writeFile(s, t, fpath, data, reNeut=False):
         f.close()
 
 
-def gt3Prep(s, t, r, m, reNeut, genFiles=False):
+def gt3Prep(s, t, r, m, reNeut, quiet = False, genFiles=False):
 
     varDict = {}
 
@@ -408,11 +411,19 @@ def gt3Prep(s, t, r, m, reNeut, genFiles=False):
     fileName = m
     fpath = os.path.join("inputs", fileName)
     if not os.path.exists(os.path.join("inputs", fileName)):
+        if quiet:
+            print """Silent mode active: No input file found.
+            
+                     Shutting down now."""
+            raise Exception
         data=getVals(s, t, fileName)
         writeFile(s, t, fpath, data, reNeut=False)
     else:
         print """Input file for shot %s.%s exists""" % (str(s), str(t))
         while True:
+            if quiet:
+                print """Silent mode active: Using current input file for shot %s.%s""" % (str(s),str(t))
+                break
             ch = raw_input("Use current input file? (Y/N) ")
             if (str(ch) == 'Y' or str(ch) == 'y'): break
             elif (str(ch) == 'N' or str(ch) == 'n'):

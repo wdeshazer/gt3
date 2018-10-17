@@ -32,8 +32,8 @@ def chiComp1(shot, shotnoIOL):
     caption = ["Ion heat conductivity in the edge for DIII-D shot 118888.1570 w/ and w/out IOL correction",
                "Neutrals calculation included"]
 
-    graphs.prettyCompare(('rhor', shot.rhor), [(prettyID[0], shot.chi2), (prettyID[1], shotnoIOL.chi2)],
-                         yrange=[-2, 2.],
+    graphs.prettyCompare(('rhor', shot.rhor), [(prettyID[0], shot.chi.chi.i.chi1), (prettyID[1], shotnoIOL.chi.chi.i.chi1)],
+                         yrange=[-200, 200.],
                          datalabels=[prettyID[0], prettyID[1]],
                          title=title,
                          ylabel=[r"$\chi_j$", r'$\left[\frac{m^2}{s}\right]$'],
@@ -519,15 +519,15 @@ def qieComp1(shot, shotnoIOL):
                          size=(16, 19))
 
 
-def fluxComp(shot, shotnoneuts):
+def fluxComp(shot, shotnoIOL, shotnoneuts):
     prettyID = [r'$\Gamma_{r,j}$ w/ neutrals',
                 r'$\Gamma_{r,j}$ w/out neutrals']
 
     caption = ["Ion radial particle flux for DIII-D shot 118888.1570 w/ and w/out neutrals"]
     title = r"$\Gamma_{r,j}$  w/ and w/out neutrals"
     adjustments = {}
-    graphs.prettyCompare(('rhor', shot.rhor), [(prettyID[0], shot.gamma), (prettyID[1], shotnoneuts.gamma)],
-                         yrange=[0.E18, 3.E19],
+    graphs.prettyCompare(('rhor', shot.rhor), [(prettyID[0], shotnoIOL.gamma_i_D), (prettyID[1], shotnoneuts.gamma_i_D)],
+                         yrange=[0.E18, 3.E20],
                          datalabels=[prettyID[0], prettyID[1]],
                          title=title,
                          ylabel=[r"$\Gamma_{r,j}$", r"$\left[\frac{\#}{m^2 s}\right]$"],
@@ -546,8 +546,8 @@ def fluxComp(shot, shotnoneuts):
     caption = ["Ion radial particle flux for DIII-D shot 118888.1570 w/ and w/out IOL Correction"]
     title = r"$\Gamma_{r,j}$  w/ and w/out IOL corr"
     adjustments = {}
-    graphs.prettyCompare(('rhor', shot.rhor), [(prettyID[0], shot.gamma), (prettyID[1], shotnoIOL.gamma)],
-                         yrange=[0.E18, 5.E19],
+    graphs.prettyCompare(('rhor', shot.rhor), [(prettyID[0], shot.gamma_i_D), (prettyID[1], shotnoIOL.gamma_i_D)],
+                         yrange=[0.E18, 3.E20],
                          datalabels=[prettyID[0], prettyID[1]],
                          title=title,
                          ylabel=[r"$\Gamma_{r,j}$", r"$\left[\frac{\#}{m^2 s}\right]$"],
@@ -572,7 +572,9 @@ if __name__ == "__main__":
                 'IOL': True,
                 'quiet': True,
                 'reNeut': False,
-                'gt3Method': 'radialtrans'}
+                'neutrals': False,
+                'gt3Method': 'radialtrans',
+                'debug' : False}
     try:
         shot = pickle.load(open("outputs/s118888.1570.dat", "rb"))
     except:
@@ -595,22 +597,24 @@ if __name__ == "__main__":
                 'IOL': False,
                 'quiet': True,
                 'reNeut': False,
-                'gt3Method': 'radialtrans'}
+                'neutrals': False,
+                'gt3Method': 'radialtrans',
+                'debug' : True}
 
     try:
         shotnoIOL = pickle.load(open("outputs/s118888.1570.noIOL.dat", "rb"))
     except:
         shotnoIOL = GTEDGE3_cli.runGT3(shotargs)
-        with open("outputs/s118888.1570.noIOL.dat", "wb") as f:
-            pickle.dump(shotnoIOL, f)
-        f.close()
+ #       with open("outputs/s118888.1570.noIOL.dat", "wb") as f:
+#            pickle.dump(shotnoIOL, f)
+#        f.close()
 
-    # chiComp1(shot,shotnoIOL)
+    chiComp1(shot,shotnoIOL)
     # chiComp2(shot,shotnoIOL)
     # chiComp3(shot,shotnoIOL)
     #chiComp4(shot, shotnoIOL)
 
-    chieComp(shot, shotnoIOL)
+#    chieComp(shot, shotnoIOL)
     #    qComp1(shot,shotnoIOL)
     #    qComp2(shot,shotnoIOL)
     #    qComp3(shot,shotnoIOL)
@@ -624,21 +628,23 @@ if __name__ == "__main__":
                 'IOL': True,
                 'quiet': True,
                 'reNeut': False,
-                'gt3Method': 'radialtrans'}
+                'neutrals': False,
+                'gt3Method': 'radialtrans',
+                'debug' : False}
     try:
         shotnoneuts = pickle.load(open("outputs/s118888.1570.noneuts.dat", "rb"))
     except:
         shotnoneuts = GTEDGE3_cli.runGT3(shotargs)
-        with open("outputs/s118888.1570.noneuts.dat", "wb") as f:
-            pickle.dump(shotnoneuts, f)
-        f.close()
+#        with open("outputs/s118888.1570.noneuts.dat", "wb") as f:
+#            pickle.dump(shotnoneuts, f)
+#        f.close()
 
-    #    chiComp1neuts(shot,shotnoneuts)
+    #ChiComp1neuts(shot,shotnoneuts)
     #    chiComp2neuts(shot,shotnoneuts)
     #    chiComp3neuts(shot,shotnoneuts)
     #chiComp4neuts(shot, shotnoneuts)
 
-    chieCompneuts(shot, shotnoneuts)
+    #chieCompneuts(shot, shotnoneuts)
 
     #    qComp1neuts(shot,shotnoneuts)
     #    qComp2neuts(shot,shotnoneuts)
@@ -646,7 +652,7 @@ if __name__ == "__main__":
     #    qComp4neuts(shot,shotnoIOL)
     #    
     #qieComp1(shot, shotnoIOL)
-    #fluxComp(shot, shotnoneuts)
+    fluxComp(shot, shotnoIOL, shotnoneuts)
 
     ####################################################################################
     #
