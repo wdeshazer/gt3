@@ -27,6 +27,7 @@ m_t = 5.006e-27
 m_c = 1.9926467e-26
 m_a = 6.643e-27
 
+
 def calc_svfus(T, mode='dd'):
     def sigv(T, mode):  # function takes T in kev
         if mode == 'dt':

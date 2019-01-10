@@ -7,16 +7,29 @@ Created on Sat Aug  5 19:48:34 2017
 from __future__ import division
 import numpy as np
 from math import pi, sqrt
-import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
+# import matplotlib.pyplot as plt
+# import matplotlib.gridspec as gridspec
 from scipy.constants import e
-import matplotlib as mpl
-import matplotlib.ticker as mtick
-from scipy.stats import maxwell
+# import matplotlib as mpl
+# import matplotlib.ticker as mtick
+# from scipy.stats import maxwell
 from scipy.special import gammaincc
 from scipy.interpolate import interp1d
 from collections import namedtuple
 import sys
+
+import time
+
+
+def timefunc(f):
+    def f_timer(*args, **kwargs):
+        start = time.time()
+        result = f(*args, **kwargs)
+        end = time.time()
+        print f.__name__, 'took', end - start, 'time'
+        return result
+    return f_timer
+
 
 m_d = 3.343583719e-27
 m_t = 5.006e-27
@@ -43,7 +56,7 @@ class IOL:
 
         # NOTE TO FUTURE DEVELOPERS: IF YOU TRY TO LOOP OVER THE PLASMA POINTS, LAUNCH ANGLES, AND
         # EXIT LOCATIONS IN PYTHON THE WAY YOU WOULD IN C OR FORTRAN, IT'S GOING TO TAKE FOREVER.
-        # ALTHOUGH THESE ARRAYS TAKE MORE MEMORY THAT I'D LIKE, IT'S CURRENTLY NECESSARY TO DO IT THIS WAY.
+        # ALTHOUGH THESE ARRAYS TAKE MORE MEMORY THAN I'D LIKE, IT'S CURRENTLY NECESSARY TO DO IT THIS WAY.
         # MAYBE SOMETHING TO IMPROVE ON IN THE FUTURE.
 
         # CREATE ARRAYS FOR LAUNCH POINTS IN THE PLASMA
@@ -68,8 +81,8 @@ class IOL:
                                    core.E_pot)[-1] * 1E3  # now in volts
 
         zeta0 = np.broadcast_arrays(np.ones(polpts)[:, None, None, None],
-                                  self.coslist[:, None, None],
-                                  np.ones(core.R.shape))[1]
+                                    self.coslist[:, None, None],
+                                    np.ones(core.R.shape))[1]
 
         # CREATE ARRAYS FOR DESTINATION POINTS ALONG THE SEPERATRIX
         R1 = np.broadcast_arrays(np.ones(polpts)[:, None, None, None],
@@ -232,10 +245,9 @@ class IOL:
         self.eorb_d_nbi_1D = self.eorb_d_nbi[:, 0]
 
 
-
-
 def calc_vsep(z, m, p):
     """Calculates V_sep"""
+
     a = (np.abs(p.B1 / p.B0) * p.f0 / p.f1 * p.zeta0) ** 2 - 1 + (1 - p.zeta0 ** 2) * np.abs(p.B1 / p.B0)
     b = 2 * z * e * (p.psi0 - p.psi1) / (p.R1 * m * p.f1) * np.abs(p.B1 / p.B0) * p.f0 / p.f1 * p.zeta0
     c = (z * e * (p.psi0 - p.psi1) / (p.R1 * m * p.f1)) ** 2 - 2 * z * e * (p.phi0 - p.phi1) / m
@@ -254,18 +266,28 @@ def calc_vsep(z, m, p):
         np.logical_or(
             np.logical_and(v_sep_1 > 0, np.logical_or(v_sep_2 <= 0, np.isnan(v_sep_2))),
             np.logical_and(np.logical_and(v_sep_1 > 0, v_sep_2 > 0), v_sep_1 < v_sep_2)
-        )
-        , v_sep_1, v_sep)
+        ),
+        v_sep_1, v_sep)
     v_sep = np.where(
         np.logical_or(
             np.logical_and(v_sep_2 > 0, np.logical_or(v_sep_1 <= 0, np.isnan(v_sep_1))),
             np.logical_and(np.logical_and(v_sep_1 > 0, v_sep_2 > 0), v_sep_2 <= v_sep_1)
-        )
-        , v_sep_2, v_sep)
+        ),
+        v_sep_2, v_sep)
 
     v_sep_min = np.nanmin(np.nanmin(v_sep, axis=0), axis=2).T
     v_sep_min[-1] = 0
     return v_sep, v_sep_min
+
+
+def expensive_function(z, m, p):
+    a = (np.abs(p.B1 / p.B0) * p.f0 / p.f1 * p.zeta0) ** 2 - 1 + (1 - p.zeta0 ** 2) * np.abs(p.B1 / p.B0)
+    b = 2 * z * e * (p.psi0 - p.psi1) / (p.R1 * m * p.f1) * np.abs(p.B1 / p.B0) * p.f0 / p.f1 * p.zeta0
+    c = (z * e * (p.psi0 - p.psi1) / (p.R1 * m * p.f1)) ** 2 - 2 * z * e * (p.phi0 - p.phi1) / m
+
+    v_sep_1 = (-b + np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
+    v_sep_2 = (-b - np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
+    return v_sep_1, v_sep_2
 
 
 def calc_iol_maxwellian(z, m, param, thetapts, Tprofile, coslist, numcos):
@@ -319,14 +341,14 @@ def calc_iol_mono_en(z, m, param, thetapts, v_mono, coslist, numcos):
         zeta_matrix[:, indx] = coslist[indx]
 
     # F_orb calculation
-    #integrand_f = np.where(v_sep_min <= v_mono, 1.0, 0)
+    # integrand_f = np.where(v_sep_min <= v_mono, 1.0, 0)
     integrand_f = np.heaviside(v_mono - v_sep_min, 1)
     F_orb_1D = np.sum(integrand_f, axis=1) * (2 / numcos) / 2
     F_orb_1D = np.nan_to_num(F_orb_1D)
     F_orb = np.repeat(F_orb_1D.reshape(-1, 1), thetapts, axis=1)
 
     # M_orb calculation
-    #integrand_m = zeta_matrix * np.where(v_sep_min <= v_mono, 1, 0)
+    # integrand_m = zeta_matrix * np.where(v_sep_min <= v_mono, 1, 0)
     integrand_m = zeta_matrix * np.heaviside(v_mono - v_sep_min, 1)
     M_orb_1D = np.sum(integrand_m, axis=1) * (2 / numcos) / 2
     M_orb_1D = np.nan_to_num(M_orb_1D)
@@ -347,7 +369,7 @@ def calc_iol_beams(z, m, param, thetapts, v_mono, zeta_beam, coslist):
     # Obtain v_sep_min(zeta_beam) for each rho value
     v_sep_min_zeta = np.zeros(len(v_sep_min))
 
-    for i,v in enumerate(v_sep_min):
+    for i, v in enumerate(v_sep_min):
         # create interpolation function of v_sep_min(rho) vs zeta
         v_sep_min_zeta_interp = interp1d(coslist, v, fill_value='extrapolate')
         # get v_sep_min(zeta_beam)
@@ -369,10 +391,8 @@ def calc_iol_beams(z, m, param, thetapts, v_mono, zeta_beam, coslist):
 
     return F_orb, M_orb, E_orb
 
-
-
 # iolplot=1
-#if iolplot==1:
+# if iolplot==1:
 #    fig = plt.figure(figsize=(5, 5))
 #    fig.suptitle('IOL a, b, c in DIII-D with cos:{}'.format(coslist[-2]), fontsize=15)
 #    ax1 = fig.add_subplot(221)

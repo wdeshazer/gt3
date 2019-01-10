@@ -83,5 +83,5 @@ class gt3:
             self.iol = IOL(self.inp, self.core)
             self.nbi = BeamDeposition(self.inp, self.core)
             self.ntrl = Neutrals(self.inp, self.core)
-            #self.imp = ImpRad(z=None, core=self.core)
+            # self.imp = ImpRad(z=None, core=self.core)
             self.rtrans = RadialTransport(self.inp, self.core, self.iol, self.nbi)
