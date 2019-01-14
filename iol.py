@@ -248,9 +248,17 @@ class IOL:
 def calc_vsep(z, m, p):
     """Calculates V_sep"""
 
-    a = (np.abs(p.B1 / p.B0) * p.f0 / p.f1 * p.zeta0) ** 2 - 1 + (1 - p.zeta0 ** 2) * np.abs(p.B1 / p.B0)
-    b = 2 * z * e * (p.psi0 - p.psi1) / (p.R1 * m * p.f1) * np.abs(p.B1 / p.B0) * p.f0 / p.f1 * p.zeta0
-    c = (z * e * (p.psi0 - p.psi1) / (p.R1 * m * p.f1)) ** 2 - 2 * z * e * (p.phi0 - p.phi1) / m
+    # a = (np.abs(p.B1 / p.B0) * p.f0 / p.f1 * p.zeta0) ** 2 - 1 + (1 - p.zeta0 ** 2) * np.abs(p.B1 / p.B0)
+    # b = 2 * z * e * (p.psi0 - p.psi1) / (p.R1 * m * p.f1) * np.abs(p.B1 / p.B0) * p.f0 / p.f1 * p.zeta0
+    # c = (z * e * (p.psi0 - p.psi1) / (p.R1 * m * p.f1)) ** 2 - 2 * z * e * (p.phi0 - p.phi1) / m
+
+    temp0 = z * e * (p.psi0 - p.psi1) / (p.R1 * m * p.f1)
+    temp1 = np.abs(p.B1 / p.B0)
+    temp2 = temp1 * p.f0 / p.f1 * p.zeta0
+
+    a = temp2 * temp2 - 1 + (1 - p.zeta0 * p.zeta0) * temp1
+    b = 2 * temp0 * temp2
+    c = temp0 * temp0 - 2 * (z * e / m) * (p.phi0 - p.phi1)
 
     v_sep_1 = (-b + np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
     v_sep_2 = (-b - np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
