@@ -260,28 +260,65 @@ def calc_vsep(z, m, p):
     b = 2 * temp0 * temp2
     c = temp0 * temp0 - 2 * (z * e / m) * (p.phi0 - p.phi1)
 
-    v_sep_1 = (-b + np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
-    v_sep_2 = (-b - np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
+    # Quadratic Formula in the form (b/2a) - sqrt( (b/2a)**2 - c/a)
+    b_over_2a = b / (2 * a)
+    discriminant = np.sqrt(b_over_2a ** 2 - c/a)
 
     v_sep = np.zeros(p.r0.shape)
-    v_sep = np.where(
-        np.logical_and(
-            np.logical_or(v_sep_1 <= 0, np.isnan(v_sep_1)),
-            np.logical_or(v_sep_2 <= 0, np.isnan(v_sep_2))
-        ),
-        np.nan, v_sep)
-    v_sep = np.where(
-        np.logical_or(
-            np.logical_and(v_sep_1 > 0, np.logical_or(v_sep_2 <= 0, np.isnan(v_sep_2))),
-            np.logical_and(np.logical_and(v_sep_1 > 0, v_sep_2 > 0), v_sep_1 < v_sep_2)
-        ),
-        v_sep_1, v_sep)
-    v_sep = np.where(
-        np.logical_or(
-            np.logical_and(v_sep_2 > 0, np.logical_or(v_sep_1 <= 0, np.isnan(v_sep_1))),
-            np.logical_and(np.logical_and(v_sep_1 > 0, v_sep_2 > 0), v_sep_2 <= v_sep_1)
-        ),
-        v_sep_2, v_sep)
+    v_sep.fill(np.nan)
+
+    # all cases where b/2a < discriminant:
+    #   -b/2a - discriminant is negative
+    #   -b/2a + discriminant is positive
+    upper_cases = b_over_2a < discriminant
+    v_sep[upper_cases] = -b_over_2a[upper_cases] + discriminant[upper_cases]
+
+    # all cases where b/2a > 0 and b/2a > D:
+    # (-b/2a - discriminant) < (-b/2a + discriminant)
+    lower_cases = np.logical_and(b_over_2a < 0, b_over_2a > discriminant)
+    v_sep[lower_cases] = -b_over_2a[lower_cases] - discriminant[lower_cases]
+
+    # all cases where b/2a > 0 and b/2a > discriminant
+    #   (-b/2a - discriminant) < (-b/2a + discriminant) < 0
+    #   v_sep for these conditions is already nan
+
+    # imag_values = np.isnan(discriminant)
+    # real_values = np.logical_not(imag_values)
+    #
+    # v_sep[imag_values] = np.nan
+
+    # b/2a is negative and sqrt(b/2a ^2 -4) > b/2a
+    # b/2a is positive b/2a
+
+    # v_sep_1 = (-b + np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
+    # v_sep_2 = (-b - np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
+    #
+    # v_sep = np.zeros(p.r0.shape)
+    # v_sep = np.where(
+    #     np.logical_and(
+    #         np.logical_or(v_sep_1 <= 0, np.isnan(v_sep_1)),
+    #         np.logical_or(v_sep_2 <= 0, np.isnan(v_sep_2))
+    #     ),
+    #     np.nan, v_sep)
+
+    # v_sep = np.zeros(temp0.shape)
+    # v_sep.fill(np.nan)
+
+    # v_sep = np.where(
+    #     np.logical_or(
+    #         np.logical_and(v_sep_1 > 0, np.logical_or(v_sep_2 <= 0, np.isnan(v_sep_2))),
+    #         np.logical_and(np.logical_and(v_sep_1 > 0, v_sep_2 > 0), v_sep_1 < v_sep_2)
+    #     ),
+    #     v_sep_1, v_sep)
+    # v_sep = np.where(
+    #     np.logical_or(
+    #         np.logical_and(v_sep_2 > 0, np.logical_or(v_sep_1 <= 0, np.isnan(v_sep_1))),
+    #         np.logical_and(np.logical_and(v_sep_1 > 0, v_sep_2 > 0), v_sep_2 <= v_sep_1)
+    #     ),
+    #     v_sep_2, v_sep)
+
+    # v_sep_min_mine = np.nanmin(np.nanmin(v_sep_mine, axis=0), axis=2).T
+    # v_sep_min_mine[-1] = 0
 
     v_sep_min = np.nanmin(np.nanmin(v_sep, axis=0), axis=2).T
     v_sep_min[-1] = 0
