@@ -259,6 +259,8 @@ def isclose(a, b, rel_tol=1e-09, abs_tol=0.0):
 
 
 def calc_fsa(x, R, Z):
+    """ Flux Surface Average.
+    """
     R1 = R[:, :-1]
     R2 = np.roll(R[:, :-1], -1, axis=1)
     Z1 = Z[:, :-1]
@@ -275,11 +277,13 @@ def calc_fsa(x, R, Z):
     x_av = (x1 + x2)/2
 
     fsa = np.sum(x_av * dA, axis=1) / np.sum(dA, axis=1)
-    fsa[0] = x[0,0]
+    fsa[0] = x[0, 0]
     return fsa
 
 
 def calc_fs_int(x, R, Z):
+    """ Calculate Flux Surface Integral
+    """
     R1 = R[:, :-1]
     R2 = np.roll(R[:, :-1], -1, axis=1)
     Z1 = Z[:, :-1]
@@ -296,7 +300,7 @@ def calc_fs_int(x, R, Z):
     x_av = (x1 + x2)/2
 
     fsa = np.sum(x_av * dA, axis=1)
-    #fsa[0] = x[0,0]
+    # fsa[0] = x[0,0]
     return fsa
 
 
@@ -310,14 +314,14 @@ def calc_fs_perim_int(x, R, Z):
 
     dl = np.sqrt((R2 - R1) ** 2 + (Z2 - Z1) ** 2)
 
-    #R_av = (R1 + R2)/2
+    # R_av = (R1 + R2)/2
 
-    #dA = dl * (2 * pi * R_av)
+    # dA = dl * (2 * pi * R_av)
 
     x_av = (x1 + x2)/2
 
     fsa = np.sum(x_av * dl, axis=1) # / np.sum(dl, axis=1)
-    fsa[0] = x[0,0]
+    fsa[0] = x[0, 0]
     return fsa
 
 
@@ -409,6 +413,7 @@ def draw_core_line(R, Z, psinorm, psi_val, sep_pts):
     )
     return fs_line, fs_pts
 
+
 def calc_kappa_elong(psi_data, sep_pts):
     # get kappa and elongation from the psi_norm=0.95 flux surface
     fs_line, fs_pts = draw_core_line(psi_data.R, psi_data.Z, psi_data.psi_norm, 0.95, sep_pts)
@@ -434,6 +439,7 @@ def calc_kappa_elong(psi_data, sep_pts):
     kappa = namedtuple('kappa', 'axis sep')(elong_0, elong_a)
     tri = namedtuple('tri', 'axis sep')(tri_0, tri_a)
     return kappa, tri
+
 
 def calc_rho1d(edge_rho=None, rhopts_core=None, rhopts_edge=None, rhopts=None):
     # define rho points
@@ -879,6 +885,7 @@ def create_surf_area_interp(rho2psinorm, psinorm2rho, psi_data, sep_pts, R0_a, a
 
     return r2sa, rho2sa, psinorm2sa
 
+
 def create_vol_interp(rho2psinorm, psinorm2rho, psi_data, sep_pts, R0_a, a):
     rho_vals = np.linspace(0, 1, 50, endpoint=True)
     r_vals = rho_vals * a
@@ -900,7 +907,6 @@ def create_vol_interp(rho2psinorm, psinorm2rho, psi_data, sep_pts, R0_a, a):
                 vol[i + 1] = pi*a_el*b_el * 2 * pi * R0_a
         else:
             vol[i+1] = Polygon(LineString(sep_pts)).area * 2*pi*R0_a
-
 
     # For some reason, psi_vals will sometimes not be monotonically increasing, especially near the magnetic axis.
     # This prevents UnivariateSpline from working. To prevent this, we're just going to delete any points that are
@@ -936,6 +942,7 @@ def create_vol_interp(rho2psinorm, psinorm2rho, psi_data, sep_pts, R0_a, a):
 
     return r2vol, rho2vol, psinorm2vol
 
+
 def calc_rho2psi_interp(pts, psi_data):
     rho_vals = np.linspace(0, 1, 100)
 
@@ -955,8 +962,6 @@ def calc_rho2psi_interp(pts, psi_data):
                         ptsRZ,
                         method='cubic')
 
-
-
     psinorm_vals[0] = 0
     psinorm_vals[-1] = 1
 
@@ -970,7 +975,7 @@ def calc_rho2psi_interp(pts, psi_data):
     for i, psi_val in enumerate(psi_vals):
         if i == 0:
             rhovals_mi.append(0)
-            psivals_mi.append(psi_vals[0])  #this is probably supposed to be zero as well, but we'll leave it for now
+            psivals_mi.append(psi_vals[0])  # this is probably supposed to be zero as well, but we'll leave it for now
             psinormvals_mi.append(0)
         elif psi_val > psivals_mi[-1]:
             rhovals_mi.append(rho_vals[i])
@@ -988,8 +993,8 @@ def calc_rho2psi_interp(pts, psi_data):
     psinorm2rho = interp1d(psinormvals_mi, rhovals_mi, fill_value='extrapolate')
     psinorm2psi = interp1d(psinormvals_mi, psivals_mi, fill_value='extrapolate')
 
-    #rho2psi = interp1d(rho_vals, psi_vals, fill_value='extrapolate')
-    #psi2rho = interp1d(psi_vals, rho_vals, fill_value='extrapolate')
+    # rho2psi = interp1d(rho_vals, psi_vals, fill_value='extrapolate')
+    # psi2rho = interp1d(psi_vals, rho_vals, fill_value='extrapolate')
 
     return rho2psi, rho2psinorm, psi2rho, psi2psinorm, psinorm2rho, psinorm2psi
 
@@ -1036,7 +1041,6 @@ class Core:
             raw_psi = inp.psirz_exp[:, 2].reshape(-1, psi_shape) * inp.psi_scale
         except AttributeError:
             raw_psi = inp.psirz_exp[:, 2].reshape(-1, psi_shape)
-
 
         xpt, mag_axis = find_xpt_mag_axis(raw_psi_R, raw_psi_Z, raw_psi)
 
@@ -1598,9 +1602,9 @@ class Core:
 
         try:
             izn_rate_t = griddata(np.column_stack((data.R, data.Z)),
-                                             data.izn_rate_thermal,
-                                             (self.R, self.Z),
-                                             method='linear')
+                                  data.izn_rate_thermal,
+                                  (self.R, self.Z),
+                                  method='linear')
         except:
             izn_rate_t = self.izn_rate.t
 
@@ -1621,22 +1625,22 @@ class Core:
     def update_Lz_data(self, z, Lz, dLzdT):
 
         Lz_slow = Lz(np.log10(self.T.n.s.kev),
-                          np.log10(self.n.n.s / self.n.e),
-                          np.log10(self.T.e.kev))
+                     np.log10(self.n.n.s / self.n.e),
+                     np.log10(self.T.e.kev))
 
         dLzdT_slow = dLzdT(np.log10(self.T.n.s.kev),
-                          np.log10(self.n.n.s / self.n.e),
-                          np.log10(self.T.e.kev))
+                           np.log10(self.n.n.s / self.n.e),
+                           np.log10(self.T.e.kev))
 
         Lz_thermal = Lz(np.log10(self.T.n.t.kev),
-                          np.log10(self.n.n.t / self.n.e),
-                          np.log10(self.T.e.kev))
+                        np.log10(self.n.n.t / self.n.e),
+                        np.log10(self.T.e.kev))
 
         dLzdT_thermal = dLzdT(np.log10(self.T.n.t.kev),
-                          np.log10(self.n.n.t / self.n.e),
-                          np.log10(self.T.e.kev))
+                              np.log10(self.n.n.t / self.n.e),
+                              np.log10(self.T.e.kev))
 
-        if z==6:
+        if z == 6:
             self.Lz_C = namedtuple('Lz_C', 's t ddT')(
                 Lz_slow,
                 Lz_thermal,
@@ -1646,7 +1650,7 @@ class Core:
                 )
             )
 
-        if z==4:
+        if z == 4:
             self.Lz_Be = namedtuple('Lz_Be', 's t ddT')(
                 Lz_slow,
                 Lz_thermal,
@@ -1695,6 +1699,3 @@ class Core:
                     dLzdT_thermal
                 )
             )
-
-
-

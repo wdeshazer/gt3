@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Fri May 18 15:04:43 2018
+Code to represent the Private Flux Region
 
 @author: max
 """
