@@ -45,7 +45,11 @@ class IOL:
         np.warnings.filterwarnings('ignore')
 
         numcos = inp.numcos  # TODO: Clean this up
+        # The additional point (numcos +1) is to account for the trimming in the
+        # The line with [:-1]. This trimming accounts for the zero at the end of the coslist
         angles = np.linspace(-1, 1, inp.numcos + 1)
+
+        # By rolling and adding, one gets angles between -1 and 1 but not including -1 and 1
         self.coslist = ((angles + np.roll(angles, -1)) / 2)[:-1]
 
         polpts = len(core.rho[-1])
@@ -264,8 +268,7 @@ def calc_vsep(z, m, p):
     b_over_2a = b / (2 * a)
     discriminant = np.sqrt(b_over_2a ** 2 - c/a)
 
-    v_sep = np.zeros(p.r0.shape)
-    v_sep.fill(np.nan)
+    v_sep = np.full(p.r0.shape, fill_value=np.nan)
 
     # all cases where b/2a < discriminant:
     #   -b/2a - discriminant is negative
@@ -281,44 +284,6 @@ def calc_vsep(z, m, p):
     # all cases where b/2a > 0 and b/2a > discriminant
     #   (-b/2a - discriminant) < (-b/2a + discriminant) < 0
     #   v_sep for these conditions is already nan
-
-    # imag_values = np.isnan(discriminant)
-    # real_values = np.logical_not(imag_values)
-    #
-    # v_sep[imag_values] = np.nan
-
-    # b/2a is negative and sqrt(b/2a ^2 -4) > b/2a
-    # b/2a is positive b/2a
-
-    # v_sep_1 = (-b + np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
-    # v_sep_2 = (-b - np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
-    #
-    # v_sep = np.zeros(p.r0.shape)
-    # v_sep = np.where(
-    #     np.logical_and(
-    #         np.logical_or(v_sep_1 <= 0, np.isnan(v_sep_1)),
-    #         np.logical_or(v_sep_2 <= 0, np.isnan(v_sep_2))
-    #     ),
-    #     np.nan, v_sep)
-
-    # v_sep = np.zeros(temp0.shape)
-    # v_sep.fill(np.nan)
-
-    # v_sep = np.where(
-    #     np.logical_or(
-    #         np.logical_and(v_sep_1 > 0, np.logical_or(v_sep_2 <= 0, np.isnan(v_sep_2))),
-    #         np.logical_and(np.logical_and(v_sep_1 > 0, v_sep_2 > 0), v_sep_1 < v_sep_2)
-    #     ),
-    #     v_sep_1, v_sep)
-    # v_sep = np.where(
-    #     np.logical_or(
-    #         np.logical_and(v_sep_2 > 0, np.logical_or(v_sep_1 <= 0, np.isnan(v_sep_1))),
-    #         np.logical_and(np.logical_and(v_sep_1 > 0, v_sep_2 > 0), v_sep_2 <= v_sep_1)
-    #     ),
-    #     v_sep_2, v_sep)
-
-    # v_sep_min_mine = np.nanmin(np.nanmin(v_sep_mine, axis=0), axis=2).T
-    # v_sep_min_mine[-1] = 0
 
     v_sep_min = np.nanmin(np.nanmin(v_sep, axis=0), axis=2).T
     v_sep_min[-1] = 0

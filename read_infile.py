@@ -156,13 +156,13 @@ class ReadInfile:
             tri_min_angle=['float', r0df],
             tri_min_area=['float', r0df],
 
-            # PFR PARAMETERS
+            # Private Flux Region PARAMETERS
             pfr_ni_val=['float', r0df],
             pfr_ne_val=['float', r0df],
             pfr_Ti_val=['float', r0df],
             pfr_Te_val=['float', r0df],
 
-            # IOL PARAMETERS
+            # Ion Orbit Loss PARAMETERS
             numcos=['int', r0di],
             R_loss=['float', r0df],
 

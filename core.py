@@ -462,8 +462,8 @@ def find_xpt_mag_axis(R, Z, psi):
     dpsidZ = np.gradient(psi, Z[:, 0], axis=0)
 
     # find line(s) where dpsidR=0
-    c_dpsidR = QuadContourGenerator.from_rectilinear(R[0], Z[:,0], dpsidR)
-    c_dpsidZ = QuadContourGenerator.from_rectilinear(R[0], Z[:,0], dpsidZ)
+    c_dpsidR = QuadContourGenerator.from_rectilinear(R[0], Z[:, 0], dpsidR)
+    c_dpsidZ = QuadContourGenerator.from_rectilinear(R[0], Z[:, 0], dpsidZ)
     dpsidR_0 = c_dpsidR.contour(0.0)
     dpsidZ_0 = c_dpsidZ.contour(0.0)
 
@@ -548,6 +548,18 @@ def calc_psi_norm(R, Z, psi, xpt, axis_mag):
 
 def calc_pts_lines(psi_data, xpt, wall, mag_axis):
     # create lines for seperatrix and divertor legs of seperatrix
+
+    # Acronym Table:
+    #   ib      - inboard
+    #   ob      - outboard
+    #   lcfs    - last closed flux surface
+    #   ibmp    - inboard midplane
+    #   obmp    - outboard midplane
+
+    # References
+    #   psi     - flux surface parameter (coordinate)
+    #   R       - major radius coordinate
+    #   Z       - axial coordinate
 
     c = QuadContourGenerator.from_rectilinear(psi_data.R[0], psi_data.Z[:, 0], psi_data.psi_norm)
     contours = c.contour(1.0)
@@ -1117,7 +1129,6 @@ class Core:
 
         self.R, self.Z = calc_RZ(self.rho, self.theta, theta_xpt, self.pts, self.psi_data, self.psi_norm, self.lines)
 
-
         self.xpt_loc = np.where(self.Z == np.amin(self.Z))
         self.obmp_loc = np.where(self.R == np.amax(self.R))
         self.ibmp_loc = np.where(self.R == np.amin(self.R))
@@ -1126,30 +1137,30 @@ class Core:
         # estimate elongation and triangularity
         self.kappa_vals, self.tri_vals = calc_kappa_elong(self.psi_data, np.asarray(self.lines.sep_closed.coords))
 
-        #create interpolation functions to obtain the flux surface surface area for any value of r, rho, or psi_norm
+        # create interpolation functions to obtain the flux surface surface area for any value of r, rho, or psi_norm
         self.r2sa, self.rho2sa, self.psinorm2sa = create_surf_area_interp(self.rho2psinorm,
-                                                                      self.psinorm2rho,
-                                                                      self.psi_data,
-                                                                      np.asarray(self.lines.sep_closed.coords),
-                                                                      self.R0_a,
-                                                                      self.a)
+                                                                          self.psinorm2rho,
+                                                                          self.psi_data,
+                                                                          np.asarray(self.lines.sep_closed.coords),
+                                                                          self.R0_a,
+                                                                          self.a)
 
-        #create interpolation functions to obtain the plasma volume for any value of r, rho, or psi_norm
+        # create interpolation functions to obtain the plasma volume for any value of r, rho, or psi_norm
         self.r2vol, self.rho2vol, self.psinorm2vol = create_vol_interp(self.rho2psinorm,
-                                                                   self.psinorm2rho,
-                                                                   self.psi_data,
-                                                                   np.asarray(self.lines.sep_closed.coords),
-                                                                   self.R0_a,
-                                                                   self.a)
+                                                                       self.psinorm2rho,
+                                                                       self.psi_data,
+                                                                       np.asarray(self.lines.sep_closed.coords),
+                                                                       self.R0_a,
+                                                                       self.a)
 
-        np.savetxt('psi2rho.txt', np.column_stack((np.linspace(0,1,100), self.psi2rho(np.linspace(0,1,100)))))
-
+        np.savetxt('psi2rho.txt', np.column_stack((np.linspace(0, 1, 100), self.psi2rho(np.linspace(0, 1, 100)))))
 
         # initialize volume as a function of rho
         self.vol_rho = self.rho2vol(self.rho)
 
         # initialize dVdrho interpolator
-        self.dVdrho = UnivariateSpline(np.linspace(0,1,100), self.rho2vol(np.linspace(0,1,100)), k=3, s=0).derivative()
+        self.dVdrho = UnivariateSpline(np.linspace(0, 1, 100),
+                                       self.rho2vol(np.linspace(0, 1, 100)), k=3, s=0).derivative()
 
         # initialize total plasma volume
         self.vol = self.rho2vol(1.0)
@@ -1215,7 +1226,6 @@ class Core:
                 nBe = ne * frac_Be
             except AttributeError:
                 nBe = np.zeros(self.rho.shape)
-
 
         # neon density
         try:
@@ -1390,7 +1400,6 @@ class Core:
             namedtuple('v_spec', 'D C')(vpolD[:, 0], vpolC[:, 0]),
             namedtuple('v_spec', 'D C')(vtorD[:, 0], vtorC[:, 0]),
         )
-
 
         # initialize magnetic field-related quantities
         B_pol_raw = np.sqrt((np.gradient(self.psi_data.psi, self.psi_data.R[0], axis=1)/self.psi_data.R) ** 2 +
