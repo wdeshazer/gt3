@@ -38,6 +38,16 @@ def grid_visualize(data, plottype='contour'):
         plt.clabel(CS, inline=1, fontsize=10)
         plt.xlabel('Radius (R)')
         plt.ylabel('Axial Location (Z)')
+    elif plottype == 'contour_cross':
+        CS = plt.contour(psi_data.psi, psi_data.R, psi_data.Z)
+        plt.clabel(CS, inline=1, fontsize=10)
+        plt.xlabel('Flux Surface (Psi)')
+        plt.ylabel('Radius (R)')
+    elif plottype == 'contour_cross_rotate':
+        CS = plt.contour(psi_data.psi, psi_data.Z, psi_data.R)
+        plt.clabel(CS, inline=1, fontsize=10)
+        plt.xlabel('Flux Surface (Psi)')
+        plt.ylabel('Axial Location (Z)')
     elif plottype == 'surf':
         ax = fig.gca(projection='3d')
         surf = ax.plot_surface(psi_data.R, psi_data.Z, psi_data.psi,
